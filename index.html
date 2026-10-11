@@ -11,7 +11,7 @@
     font:14px/1.4 system-ui, sans-serif; overflow:hidden; }
   body { display:flex; flex-direction:column; height:100dvh; }
 
-  #stage { flex:1; min-height:0; position:relative; padding:12px 10px; }
+  #stage { flex:1; min-height:0; position:relative; padding:12px 10px; touch-action:none; }
   #book  { width:100%; height:100%; }
 
   #msg { position:absolute; inset:0; display:flex; align-items:center;
@@ -127,6 +127,7 @@
       drawShadow: true,
       maxShadowOpacity: 0.5,
       flippingTime: 800,
+      useMouseEvents: false,      // ปิดการลากแบบเดิม (มุมกระดาษกระโดดตามนิ้ว) ใช้การปัดแทน
       mobileScrollSupport: false
     });
 
@@ -158,6 +159,33 @@
     flip.turnToPage(n - 1);
     updateUI(n - 1);
   };
+
+  // ปัดซ้าย/ขวาเพื่อพลิกหน้า หรือแตะขอบซ้าย/ขวา
+  // แอนิเมชันเริ่มจากมุมบนหรือล่าง ตามตำแหน่งที่แตะ จึงไม่มีการกระโดด
+  const stage = $("stage");
+  let sx = null, sy = null;
+
+  stage.addEventListener("pointerdown", e => {
+    if (e.target.closest("#thumbs")) return;
+    sx = e.clientX; sy = e.clientY;
+  });
+
+  stage.addEventListener("pointerup", e => {
+    if (sx === null || !flip) return;
+    const r = stage.getBoundingClientRect();
+    const corner = (sy - r.top) < r.height / 2 ? "top" : "bottom";
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      dx < 0 ? flip.flipNext(corner) : flip.flipPrev(corner);
+    } else if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+      const x = (e.clientX - r.left) / r.width;
+      if (x < 0.3) flip.flipPrev(corner);
+      else if (x > 0.7) flip.flipNext(corner);
+    }
+    sx = sy = null;
+  });
+  stage.addEventListener("pointercancel", () => { sx = sy = null; });
 
   document.addEventListener("keydown", e => {
     if (!flip || e.target.tagName === "INPUT") return;
