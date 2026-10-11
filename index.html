@@ -1,1 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Flipbook</title>
+  <style>
+    body { margin:0; background:#222; display:flex;
+           justify-content:center; align-items:center; height:100vh; }
+    .page img { width:100%; height:100%; object-fit:cover; }
+  </style>
+</head>
+<body>
+  <div id="book"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.js"></script>
+  <script>
+    const pages = ["images/page1.jpg","images/page2.jpg","images/page3.jpg","images/page4.jpg"];
+
+    const flip = new St.PageFlip(document.getElementById("book"), {
+      width: 400, height: 560,
+      size: "stretch",
+      minWidth: 300, maxWidth: 800,
+      minHeight: 400, maxHeight: 1100,
+      showCover: true,
+      mobileScrollSupport: false
+    });
+
+    const els = pages.map(src => {
+      const d = document.createElement("div");
+      d.className = "page";
+      d.innerHTML = `<img src="${src}">`;
+      return d;
+    });
+    flip.loadFromHTML(els);
+  </script>
+</body>
+</html>
