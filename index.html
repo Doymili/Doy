@@ -1,41 +1,178 @@
 <!DOCTYPE html>
-<html>
+<html lang="th">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>My Flipbook</title>
-  <style>
-    body { margin:0; background:#555; display:flex;
-           justify-content:center; align-items:center; height:100vh; }
-    .page img { width:100%; height:100%; object-fit:cover; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flipbook</title>
+<style>
+  :root { --bg:#555; --bar:#2a2a2a; --ink:#e8e8e8; --dim:#9a9a9a; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font:14px/1.4 system-ui, sans-serif; overflow:hidden; }
+  body { display:flex; flex-direction:column; height:100dvh; }
+
+  #stage { flex:1; min-height:0; position:relative; padding:12px 10px; }
+  #book  { width:100%; height:100%; }
+
+  #msg { position:absolute; inset:0; display:flex; align-items:center;
+    justify-content:center; text-align:center; padding:24px; color:var(--dim); }
+  #msg[hidden] { display:none; }
+
+  /* toolbar */
+  #bar { height:48px; flex:none; background:var(--bar); display:flex;
+    align-items:center; justify-content:space-between; padding:0 6px;
+    padding-bottom:env(safe-area-inset-bottom); }
+  #bar .grp { display:flex; align-items:center; gap:2px; }
+  button { background:none; border:0; color:var(--ink); width:40px; height:40px;
+    border-radius:6px; display:grid; place-items:center; cursor:pointer; }
+  button:active { background:#ffffff22; }
+  button:focus-visible { outline:2px solid #fff; outline-offset:-2px; }
+  button svg { width:20px; height:20px; fill:none; stroke:currentColor;
+    stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  #pageBox { display:flex; align-items:center; gap:4px; color:var(--dim); margin:0 4px; }
+  #pageNo { width:46px; height:28px; text-align:center; border:0; border-radius:3px;
+    background:#fff; color:#111; font:inherit; }
+
+  /* thumbnails */
+  #thumbs { position:absolute; inset:0 0 48px 0; background:#1d1d1dee; z-index:20;
+    overflow:auto; padding:16px; display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:12px;
+    align-content:start; }
+  #thumbs[hidden] { display:none; }
+  #thumbs figure { margin:0; cursor:pointer; text-align:center; color:var(--dim); }
+  #thumbs img { width:100%; display:block; border:2px solid transparent; border-radius:3px; }
+  #thumbs figure.on img { border-color:#fff; }
+</style>
 </head>
 <body>
+
+<div id="stage">
   <div id="book"></div>
+  <div id="msg" hidden>โหลดรูปไม่ได้ ตรวจสอบชื่อไฟล์ในโฟลเดอร์ images/ ให้ตรงกับรายการ PAGES</div>
+  <div id="thumbs" hidden></div>
+</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.js"></script>
-  <script>
-    const pages = ["images/page1.jpg","images/page2.jpg","images/page3.jpg","images/page4.jpg"];
+<div id="bar">
+  <div class="grp">
+    <button id="btnThumbs" title="ดูทุกหน้า" aria-label="ดูทุกหน้า">
+      <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/></svg>
+    </button>
+  </div>
 
-const flip = new St.PageFlip(document.getElementById("book"), {
-  width: 400, height: 560,
-  size: "stretch",
-  minWidth: 300, maxWidth: 1000,
-  minHeight: 400, maxHeight: 1400,
-  usePortrait: true,        
-  showCover: true,
-  drawShadow: true,         
-  maxShadowOpacity: 0.6,    
-  flippingTime: 900,        
-  mobileScrollSupport: false
-});
-    const els = pages.map(src => {
-      const d = document.createElement("div");
-      d.className = "page";
-      d.innerHTML = `<img src="${src}">`;
-      return d;
+  <div class="grp">
+    <button id="btnFirst" title="หน้าแรก" aria-label="หน้าแรก">
+      <svg viewBox="0 0 24 24"><path d="M6 5v14M18 6l-8 6 8 6"/></svg>
+    </button>
+    <button id="btnPrev" title="ก่อนหน้า" aria-label="ก่อนหน้า">
+      <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+    <div id="pageBox">
+      <input id="pageNo" type="number" inputmode="numeric" min="1" value="1" aria-label="เลขหน้า">
+      <span>/ <span id="pageTotal">0</span></span>
+    </div>
+    <button id="btnNext" title="ถัดไป" aria-label="ถัดไป">
+      <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+    <button id="btnLast" title="หน้าสุดท้าย" aria-label="หน้าสุดท้าย">
+      <svg viewBox="0 0 24 24"><path d="M18 5v14M6 6l8 6-8 6"/></svg>
+    </button>
+  </div>
+
+  <div class="grp">
+    <button id="btnFs" title="เต็มจอ" aria-label="เต็มจอ">
+      <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.js"></script>
+<script>
+  // ใส่รายชื่อรูปหน้าหนังสือตรงนี้ (เรียงตามลำดับหน้า)
+  const PAGES = [
+    "images/page1.jpg",
+    "images/page2.jpg",
+    "images/page3.jpg",
+    "images/page4.jpg"
+  ];
+
+  const $ = id => document.getElementById(id);
+  let flip;
+
+  function updateUI(index) {
+    $("pageNo").value = index + 1;
+    document.querySelectorAll("#thumbs figure").forEach((f, i) =>
+      f.classList.toggle("on", i === index));
+  }
+
+  function buildThumbs() {
+    const box = $("thumbs");
+    PAGES.forEach((src, i) => {
+      const f = document.createElement("figure");
+      f.innerHTML = `<img src="${src}" alt="หน้า ${i + 1}" loading="lazy"><figcaption>${i + 1}</figcaption>`;
+      f.onclick = () => { box.hidden = true; flip.turnToPage(i); updateUI(i); };
+      box.appendChild(f);
     });
-    flip.loadFromHTML(els);
-  </script>
+  }
+
+  function start(ratio) {
+    const W = 500, H = Math.round(W * ratio);
+
+    flip = new St.PageFlip($("book"), {
+      width: W, height: H,
+      size: "stretch",
+      minWidth: 260, maxWidth: 1200,
+      minHeight: Math.round(260 * ratio), maxHeight: Math.round(1200 * ratio),
+      usePortrait: true,          // จอแคบ = โชว์ทีละหน้า
+      showCover: true,
+      drawShadow: true,
+      maxShadowOpacity: 0.5,
+      flippingTime: 800,
+      mobileScrollSupport: false
+    });
+
+    // โหมด canvas: ม้วนมุมกระดาษและเงาเนียนกว่าโหมด HTML
+    flip.loadFromImages(PAGES);
+
+    flip.on("flip", e => updateUI(e.data));
+    $("pageTotal").textContent = PAGES.length;
+    $("pageNo").max = PAGES.length;
+    buildThumbs();
+    updateUI(0);
+  }
+
+  // อ่านสัดส่วนรูปจริง เพื่อไม่ให้หน้าเบี้ยวหรือถูกครอป
+  const probe = new Image();
+  probe.onload = () => start(probe.naturalHeight / probe.naturalWidth);
+  probe.onerror = () => { $("msg").hidden = false; };
+  probe.src = PAGES[0];
+
+  // ปุ่มควบคุม
+  $("btnFirst").onclick = () => { flip.turnToPage(0); updateUI(0); };
+  $("btnLast").onclick  = () => { const l = PAGES.length - 1; flip.turnToPage(l); updateUI(l); };
+  $("btnPrev").onclick  = () => flip.flipPrev();
+  $("btnNext").onclick  = () => flip.flipNext();
+  $("btnThumbs").onclick = () => { $("thumbs").hidden = !$("thumbs").hidden; };
+
+  $("pageNo").onchange = e => {
+    const n = Math.min(PAGES.length, Math.max(1, parseInt(e.target.value, 10) || 1));
+    flip.turnToPage(n - 1);
+    updateUI(n - 1);
+  };
+
+  document.addEventListener("keydown", e => {
+    if (!flip || e.target.tagName === "INPUT") return;
+    if (e.key === "ArrowRight") flip.flipNext();
+    if (e.key === "ArrowLeft")  flip.flipPrev();
+  });
+
+  // เต็มจอ (iPhone Safari ไม่รองรับสำหรับหน้าเว็บทั่วไป จึงซ่อนปุ่มไว้)
+  const root = document.documentElement;
+  if (!root.requestFullscreen) $("btnFs").style.display = "none";
+  $("btnFs").onclick = () =>
+    document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen();
+  document.addEventListener("fullscreenchange", () => {
+    setTimeout(() => flip && flip.update(), 300);
+  });
+</script>
 </body>
 </html>
