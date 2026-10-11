@@ -17,15 +17,18 @@
   <script>
     const pages = ["images/page1.jpg","images/page2.jpg","images/page3.jpg","images/page4.jpg"];
 
-    const flip = new St.PageFlip(document.getElementById("book"), {
-      width: 400, height: 560,
-      size: "stretch",
-      minWidth: 300, maxWidth: 800,
-      minHeight: 400, maxHeight: 1100,
-      showCover: true,
-      mobileScrollSupport: false
-    });
-
+const flip = new St.PageFlip(document.getElementById("book"), {
+  width: 400, height: 560,
+  size: "stretch",
+  minWidth: 300, maxWidth: 1000,
+  minHeight: 400, maxHeight: 1400,
+  usePortrait: true,        
+  showCover: true,
+  drawShadow: true,         
+  maxShadowOpacity: 0.6,    
+  flippingTime: 900,        
+  mobileScrollSupport: false
+});
     const els = pages.map(src => {
       const d = document.createElement("div");
       d.className = "page";
