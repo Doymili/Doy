@@ -11,14 +11,33 @@
     font:14px/1.4 system-ui, sans-serif; overflow:hidden; }
   body { display:flex; flex-direction:column; height:100dvh; }
 
-  #stage { flex:1; min-height:0; position:relative; padding:12px 10px; touch-action:none; }
-  #book  { width:100%; height:100%; }
+  #stage { flex:1; min-height:0; position:relative; touch-action:none;
+    user-select:none; -webkit-user-select:none; }
+
+  /* หน้าหนังสือ: ทุกชั้นซ้อนกันด้วย position:absolute */
+  #book { position:absolute; overflow:hidden; background:#fff;
+    box-shadow:0 6px 24px #0009; display:none; }
+  #book img, #book div { position:absolute; top:0; height:100%;
+    pointer-events:none; -webkit-user-drag:none; }
+  #imgUnder, #imgTop { left:0; width:100%; }
+
+  .shade { width:0; }
+  #shadeNext { background:linear-gradient(to right, rgba(0,0,0,.38), rgba(0,0,0,0)); }
+  #shadeTop  { background:linear-gradient(to left,  rgba(0,0,0,.30), rgba(0,0,0,0)); }
+
+  /* ด้านหลังกระดาษที่พับ: กลับด้านรูป แล้วทำให้จางลง */
+  #strip { overflow:hidden; background:#ececef; }
+  #imgBack { left:0; opacity:.5; transform:scaleX(-1); }
+  #stripShade { left:0; width:100%;
+    background:linear-gradient(to right,
+      rgba(0,0,0,.22) 0%, rgba(255,255,255,.55) 14%,
+      rgba(255,255,255,.30) 80%, rgba(0,0,0,.30) 100%); }
 
   #msg { position:absolute; inset:0; display:flex; align-items:center;
     justify-content:center; text-align:center; padding:24px; color:var(--dim); }
   #msg[hidden] { display:none; }
 
-  /* toolbar */
+  /* แถบปุ่มด้านล่าง */
   #bar { height:48px; flex:none; background:var(--bar); display:flex;
     align-items:center; justify-content:space-between; padding:0 6px;
     padding-bottom:env(safe-area-inset-bottom); }
@@ -33,11 +52,11 @@
   #pageNo { width:46px; height:28px; text-align:center; border:0; border-radius:3px;
     background:#fff; color:#111; font:inherit; }
 
-  /* thumbnails */
-  #thumbs { position:absolute; inset:0 0 48px 0; background:#1d1d1dee; z-index:20;
+  /* ดูทุกหน้า */
+  #thumbs { position:absolute; inset:0; background:#1d1d1dee; z-index:20;
     overflow:auto; padding:16px; display:grid;
     grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:12px;
-    align-content:start; }
+    align-content:start; touch-action:pan-y; }
   #thumbs[hidden] { display:none; }
   #thumbs figure { margin:0; cursor:pointer; text-align:center; color:var(--dim); }
   #thumbs img { width:100%; display:block; border:2px solid transparent; border-radius:3px; }
@@ -47,7 +66,13 @@
 <body>
 
 <div id="stage">
-  <div id="book"></div>
+  <div id="book">
+    <img id="imgUnder" alt="">
+    <div id="shadeNext" class="shade"></div>
+    <img id="imgTop" alt="">
+    <div id="shadeTop" class="shade"></div>
+    <div id="strip"><img id="imgBack" alt=""><div id="stripShade"></div></div>
+  </div>
   <div id="msg" hidden>โหลดรูปไม่ได้ ตรวจสอบชื่อไฟล์ในโฟลเดอร์ images/ ให้ตรงกับรายการ PAGES</div>
   <div id="thumbs" hidden></div>
 </div>
@@ -85,7 +110,6 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.js"></script>
 <script>
   // ใส่รายชื่อรูปหน้าหนังสือตรงนี้ (เรียงตามลำดับหน้า)
   const PAGES = [
@@ -96,101 +120,183 @@
   ];
 
   const $ = id => document.getElementById(id);
-  let flip;
+  const stage = $("stage"), book = $("book");
+  const imgTop = $("imgTop"), imgUnder = $("imgUnder"), imgBack = $("imgBack");
+  const strip = $("strip"), shadeTop = $("shadeTop"), shadeNext = $("shadeNext");
+  const N = PAGES.length;
 
-  function updateUI(index) {
-    $("pageNo").value = index + 1;
-    document.querySelectorAll("#thumbs figure").forEach((f, i) =>
-      f.classList.toggle("on", i === index));
+  let cur = 0;          // หน้าปัจจุบัน (เริ่มที่ 0)
+  let W = 0, H = 0;     // ขนาดหน้าหนังสือ (px)
+  let ratio = 1;        // สูง / กว้าง ของรูป
+  let M = 0;            // ตำแหน่งรอยพับ: W = ยังไม่พลิก, 0 = พลิกเสร็จแล้ว
+  let turn = null;      // { t: หน้าที่กำลังพลิก, dir: "next" | "prev" }
+  let busy = false, ready = false, raf = 0;
+
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+  function setSrc(el, i) {
+    const s = PAGES[i];
+    if (s === undefined) { el.style.visibility = "hidden"; return; }
+    el.style.visibility = "visible";
+    if (el.getAttribute("src") !== s) el.src = s;
   }
 
+  // ตั้งชั้นรูป: หน้า t อยู่บน, หน้า t+1 อยู่ข้างใต้
+  function layout(t, m) {
+    setSrc(imgTop, t); setSrc(imgBack, t); setSrc(imgUnder, t + 1);
+    render(m);
+  }
+
+  // วาดตามตำแหน่งรอยพับ m
+  function render(m) {
+    M = m;
+    const sw = W - m;                           // ความกว้างแถบด้านหลังกระดาษ
+    imgTop.style.clipPath = `inset(0 ${sw}px 0 0)`;
+    if (sw < 0.5) {
+      strip.style.display = shadeTop.style.display = shadeNext.style.display = "none";
+      return;
+    }
+    const f = 2 * m - W;                        // ขอบซ้ายของแถบ (มุมกระดาษ)
+    strip.style.display = "block";
+    strip.style.left = f + "px";
+    strip.style.width = sw + "px";
+    shadeTop.style.display = "block";
+    shadeTop.style.left = (f - 30) + "px";
+    shadeTop.style.width = "30px";
+    shadeNext.style.display = m > 1 ? "block" : "none";
+    shadeNext.style.left = m + "px";
+    shadeNext.style.width = "40px";
+  }
+
+  function updateUI(i) {
+    $("pageNo").value = i + 1;
+    document.querySelectorAll("#thumbs figure").forEach((f, k) =>
+      f.classList.toggle("on", k === i));
+  }
+
+  function fit() {
+    const aw = stage.clientWidth - 20, ah = stage.clientHeight - 24;
+    let w = aw, h = w * ratio;
+    if (h > ah) { h = ah; w = h / ratio; }
+    W = w; H = h;
+    book.style.width = w + "px";
+    book.style.height = h + "px";
+    book.style.left = (stage.clientWidth - w) / 2 + "px";
+    book.style.top = (stage.clientHeight - h) / 2 + "px";
+    imgBack.style.width = w + "px";
+    if (!turn) layout(cur, W); else render(clamp(M, 0, W));
+  }
+
+  function finish() {
+    cur = M >= W - 0.5 ? turn.t : turn.t + 1;
+    turn = null; busy = false;
+    layout(cur, W);
+    updateUI(cur);
+  }
+
+  function animateTo(target) {
+    busy = true;
+    cancelAnimationFrame(raf);
+    const from = M, t0 = performance.now();
+    const dur = Math.max(160, 480 * Math.abs(target - from) / W);
+    const step = now => {
+      const k = Math.min(1, (now - t0) / dur);
+      const e = 1 - Math.pow(1 - k, 3);
+      render(from + (target - from) * e);
+      if (k < 1) raf = requestAnimationFrame(step);
+      else { render(target); finish(); }
+    };
+    raf = requestAnimationFrame(step);
+  }
+
+  function go(d) {
+    if (busy || !ready) return;
+    if (d > 0 && cur < N - 1) { turn = { t: cur, dir: "next" }; layout(cur, W); animateTo(0); }
+    else if (d < 0 && cur > 0) { turn = { t: cur - 1, dir: "prev" }; layout(cur - 1, 0); animateTo(W); }
+  }
+
+  function goTo(i) {
+    if (busy || !ready) return;
+    cur = clamp(i, 0, N - 1);
+    layout(cur, W);
+    updateUI(cur);
+  }
+
+  // ลากนิ้ว: รอยพับเคลื่อนตามนิ้วแบบสัมพัทธ์ ไม่กระโดด
+  let g = null;
+
+  stage.addEventListener("pointerdown", e => {
+    if (busy || !ready || e.target.closest("#thumbs")) return;
+    g = { id: e.pointerId, sx: e.clientX, sy: e.clientY,
+          lx: e.clientX, lt: e.timeStamp, vx: 0, mode: null };
+    stage.setPointerCapture(e.pointerId);
+  });
+
+  stage.addEventListener("pointermove", e => {
+    if (!g || e.pointerId !== g.id) return;
+    const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
+    const dt = e.timeStamp - g.lt;
+    if (dt > 0) {
+      g.vx = 0.6 * g.vx + 0.4 * ((e.clientX - g.lx) / dt);
+      g.lx = e.clientX; g.lt = e.timeStamp;
+    }
+    if (g.mode === null) {
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+        if (dx < 0 && cur < N - 1) { turn = { t: cur, dir: "next" }; g.mode = "next"; layout(cur, W); }
+        else if (dx > 0 && cur > 0) { turn = { t: cur - 1, dir: "prev" }; g.mode = "prev"; layout(cur - 1, 0); }
+        else g.mode = "none";
+      } else if (Math.abs(dy) > 8) g.mode = "none";
+      else return;
+    }
+    if (g.mode === "next") render(clamp(W + dx, 0, W));
+    else if (g.mode === "prev") render(clamp(dx, 0, W));
+  });
+
+  function endGesture(e, cancelled) {
+    if (!g || e.pointerId !== g.id) return;
+    const s = g; g = null;
+    if (s.mode === "next") {
+      const done = !cancelled && ((M < W * 0.6 && s.vx < 0.3) || s.vx < -0.5);
+      animateTo(done ? 0 : W);
+    } else if (s.mode === "prev") {
+      const done = !cancelled && ((M > W * 0.4 && s.vx > -0.3) || s.vx > 0.5);
+      animateTo(done ? W : 0);
+    } else if (s.mode === null && !cancelled) {
+      // แตะขอบซ้าย/ขวาของหน้าเพื่อพลิก
+      const r = book.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right &&
+          e.clientY >= r.top && e.clientY <= r.bottom) {
+        const x = (e.clientX - r.left) / r.width;
+        if (x < 0.3) go(-1); else if (x > 0.7) go(1);
+      }
+    }
+  }
+  stage.addEventListener("pointerup", e => endGesture(e, false));
+  stage.addEventListener("pointercancel", e => endGesture(e, true));
+
+  // ดูทุกหน้า
   function buildThumbs() {
     const box = $("thumbs");
     PAGES.forEach((src, i) => {
       const f = document.createElement("figure");
       f.innerHTML = `<img src="${src}" alt="หน้า ${i + 1}" loading="lazy"><figcaption>${i + 1}</figcaption>`;
-      f.onclick = () => { box.hidden = true; flip.turnToPage(i); updateUI(i); };
+      f.onclick = () => { box.hidden = true; goTo(i); };
       box.appendChild(f);
     });
   }
 
-  function start(ratio) {
-    const W = 500, H = Math.round(W * ratio);
-
-    flip = new St.PageFlip($("book"), {
-      width: W, height: H,
-      size: "stretch",
-      minWidth: 260, maxWidth: 1200,
-      minHeight: Math.round(260 * ratio), maxHeight: Math.round(1200 * ratio),
-      usePortrait: true,          // จอแคบ = โชว์ทีละหน้า
-      showCover: true,
-      drawShadow: true,
-      maxShadowOpacity: 0.5,
-      flippingTime: 800,
-      useMouseEvents: false,      // ปิดการลากแบบเดิม (มุมกระดาษกระโดดตามนิ้ว) ใช้การปัดแทน
-      mobileScrollSupport: false
-    });
-
-    // โหมด canvas: ม้วนมุมกระดาษและเงาเนียนกว่าโหมด HTML
-    flip.loadFromImages(PAGES);
-
-    flip.on("flip", e => updateUI(e.data));
-    $("pageTotal").textContent = PAGES.length;
-    $("pageNo").max = PAGES.length;
-    buildThumbs();
-    updateUI(0);
-  }
-
-  // อ่านสัดส่วนรูปจริง เพื่อไม่ให้หน้าเบี้ยวหรือถูกครอป
-  const probe = new Image();
-  probe.onload = () => start(probe.naturalHeight / probe.naturalWidth);
-  probe.onerror = () => { $("msg").hidden = false; };
-  probe.src = PAGES[0];
-
   // ปุ่มควบคุม
-  $("btnFirst").onclick = () => { flip.turnToPage(0); updateUI(0); };
-  $("btnLast").onclick  = () => { const l = PAGES.length - 1; flip.turnToPage(l); updateUI(l); };
-  $("btnPrev").onclick  = () => flip.flipPrev();
-  $("btnNext").onclick  = () => flip.flipNext();
+  $("btnFirst").onclick = () => goTo(0);
+  $("btnLast").onclick  = () => goTo(N - 1);
+  $("btnPrev").onclick  = () => go(-1);
+  $("btnNext").onclick  = () => go(1);
   $("btnThumbs").onclick = () => { $("thumbs").hidden = !$("thumbs").hidden; };
-
-  $("pageNo").onchange = e => {
-    const n = Math.min(PAGES.length, Math.max(1, parseInt(e.target.value, 10) || 1));
-    flip.turnToPage(n - 1);
-    updateUI(n - 1);
-  };
-
-  // ปัดซ้าย/ขวาเพื่อพลิกหน้า หรือแตะขอบซ้าย/ขวา
-  // แอนิเมชันเริ่มจากมุมบนหรือล่าง ตามตำแหน่งที่แตะ จึงไม่มีการกระโดด
-  const stage = $("stage");
-  let sx = null, sy = null;
-
-  stage.addEventListener("pointerdown", e => {
-    if (e.target.closest("#thumbs")) return;
-    sx = e.clientX; sy = e.clientY;
-  });
-
-  stage.addEventListener("pointerup", e => {
-    if (sx === null || !flip) return;
-    const r = stage.getBoundingClientRect();
-    const corner = (sy - r.top) < r.height / 2 ? "top" : "bottom";
-    const dx = e.clientX - sx, dy = e.clientY - sy;
-
-    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
-      dx < 0 ? flip.flipNext(corner) : flip.flipPrev(corner);
-    } else if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
-      const x = (e.clientX - r.left) / r.width;
-      if (x < 0.3) flip.flipPrev(corner);
-      else if (x > 0.7) flip.flipNext(corner);
-    }
-    sx = sy = null;
-  });
-  stage.addEventListener("pointercancel", () => { sx = sy = null; });
+  $("pageNo").onchange = e => goTo((parseInt(e.target.value, 10) || 1) - 1);
 
   document.addEventListener("keydown", e => {
-    if (!flip || e.target.tagName === "INPUT") return;
-    if (e.key === "ArrowRight") flip.flipNext();
-    if (e.key === "ArrowLeft")  flip.flipPrev();
+    if (e.target.tagName === "INPUT") return;
+    if (e.key === "ArrowRight") go(1);
+    if (e.key === "ArrowLeft")  go(-1);
   });
 
   // เต็มจอ (iPhone Safari ไม่รองรับสำหรับหน้าเว็บทั่วไป จึงซ่อนปุ่มไว้)
@@ -198,9 +304,24 @@
   if (!root.requestFullscreen) $("btnFs").style.display = "none";
   $("btnFs").onclick = () =>
     document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen();
-  document.addEventListener("fullscreenchange", () => {
-    setTimeout(() => flip && flip.update(), 300);
-  });
+  document.addEventListener("fullscreenchange", () => setTimeout(fit, 300));
+  window.addEventListener("resize", () => { if (ready) fit(); });
+
+  // เริ่มทำงาน: อ่านสัดส่วนรูปจริงก่อน เพื่อไม่ให้ภาพเบี้ยวหรือถูกครอป
+  PAGES.forEach(s => { new Image().src = s; });   // โหลดล่วงหน้า
+  const probe = new Image();
+  probe.onload = () => {
+    ratio = probe.naturalHeight / probe.naturalWidth;
+    $("pageTotal").textContent = N;
+    $("pageNo").max = N;
+    book.style.display = "block";
+    ready = true;
+    buildThumbs();
+    fit();
+    updateUI(0);
+  };
+  probe.onerror = () => { $("msg").hidden = false; };
+  probe.src = PAGES[0];
 </script>
 </body>
 </html>
