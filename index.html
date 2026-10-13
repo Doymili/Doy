@@ -14,6 +14,7 @@
   #stage { flex:1; min-height:0; position:relative; touch-action:none;
     user-select:none; -webkit-user-select:none; }
 
+  /* หน้าหนังสือ: ทุกชั้นซ้อนกันด้วย position:absolute */
   #book { position:absolute; overflow:hidden; background:#fff;
     box-shadow:0 6px 24px #0009; display:none; }
   #book img, #book div { position:absolute; top:0; height:100%;
@@ -24,6 +25,7 @@
   #shadeNext { background:linear-gradient(to right, rgba(0,0,0,.38), rgba(0,0,0,0)); }
   #shadeTop  { background:linear-gradient(to left,  rgba(0,0,0,.30), rgba(0,0,0,0)); }
 
+  /* ด้านหลังกระดาษที่พับ: กลับด้านรูป แล้วทำให้จางลง */
   #strip { overflow:hidden; background:#ececef; }
   #imgBack { left:0; opacity:.5; transform:scaleX(-1); }
   #stripShade { left:0; width:100%;
@@ -35,6 +37,7 @@
     justify-content:center; text-align:center; padding:24px; color:var(--dim); }
   #msg[hidden] { display:none; }
 
+  /* แถบปุ่มด้านล่าง */
   #bar { height:48px; flex:none; background:var(--bar); display:flex;
     align-items:center; justify-content:space-between; padding:0 6px;
     padding-bottom:env(safe-area-inset-bottom); }
@@ -49,6 +52,7 @@
   #pageNo { width:46px; height:28px; text-align:center; border:0; border-radius:3px;
     background:#fff; color:#111; font:inherit; }
 
+  /* ดูทุกหน้า */
   #thumbs { position:absolute; inset:0; background:#1d1d1dee; z-index:20;
     overflow:auto; padding:16px; display:grid;
     grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:12px;
@@ -69,7 +73,7 @@
     <div id="shadeTop" class="shade"></div>
     <div id="strip"><img id="imgBack" alt=""><div id="stripShade"></div></div>
   </div>
-  <div id="msg" hidden>โหลดรูปไม่ได้ ตรวจสอบชื่อไฟล์ในโฟลเดอร์ images/ ให้ตรงกับรายการ PAGES</div>
+  <div id="msg" hidden>ไม่พบรูป ตรวจสอบว่ามีไฟล์ images/page1.jpg และชื่อเรียงต่อเนื่องกัน</div>
   <div id="thumbs" hidden></div>
 </div>
 
@@ -107,14 +111,17 @@
 </div>
 
 <script>
-  const COUNT = 11;
-  const PAGES = Array.from({ length: COUNT }, (_, i) => `images/page${i + 1}.jpg`);
+  // โค้ดนับจำนวนหน้าเอง: ใส่รูปชื่อ page1.jpg, page2.jpg, page3.jpg ... ต่อเนื่องกัน
+  // ในโฟลเดอร์ images/ กี่รูปก็ได้ ไม่ต้องแก้ไฟล์นี้อีก
+  const DIR = "images/";
+  const EXT = "jpg";      // ถ้ารูปเป็น png ให้เปลี่ยนเป็น "png"
+  let PAGES = [];         // เติมอัตโนมัติตอนโหลดหน้า
 
   const $ = id => document.getElementById(id);
   const stage = $("stage"), book = $("book");
   const imgTop = $("imgTop"), imgUnder = $("imgUnder"), imgBack = $("imgBack");
   const strip = $("strip"), shadeTop = $("shadeTop"), shadeNext = $("shadeNext");
-  const N = PAGES.length;
+  let N = 0;            // จำนวนหน้า (นับอัตโนมัติ)
 
   let cur = 0;          // หน้าปัจจุบัน (เริ่มที่ 0)
   let W = 0, H = 0;     // ขนาดหน้าหนังสือ (px)
@@ -298,11 +305,35 @@
   document.addEventListener("fullscreenchange", () => setTimeout(fit, 300));
   window.addEventListener("resize", () => { if (ready) fit(); });
 
-  // เริ่มทำงาน: อ่านสัดส่วนรูปจริงก่อน เพื่อไม่ให้ภาพเบี้ยวหรือถูกครอป
-  PAGES.forEach(s => { new Image().src = s; });   // โหลดล่วงหน้า
-  const probe = new Image();
-  probe.onload = () => {
-    ratio = probe.naturalHeight / probe.naturalWidth;
+  // หารูปทีละชุด (8 รูปต่อรอบ) จนเจอเลขที่ไม่มีไฟล์ แล้วหยุด
+  function tryLoad(src) {
+    return new Promise(res => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => res(null);
+      im.src = src;
+    });
+  }
+
+  async function discover() {
+    const found = [];
+    for (let i = 1; i <= 1000; i += 8) {
+      const batch = await Promise.all(
+        Array.from({ length: 8 }, (_, k) => tryLoad(`${DIR}page${i + k}.${EXT}`)));
+      for (const im of batch) {
+        if (!im) return found;
+        found.push(im);
+      }
+    }
+    return found;
+  }
+
+  discover().then(imgs => {
+    if (!imgs.length) { $("msg").hidden = false; return; }
+    window._pageCache = imgs;                      // เก็บไว้ให้รูปโหลดล่วงหน้าค้างใน cache
+    PAGES = imgs.map((_, k) => `${DIR}page${k + 1}.${EXT}`);
+    N = PAGES.length;
+    ratio = imgs[0].naturalHeight / imgs[0].naturalWidth;
     $("pageTotal").textContent = N;
     $("pageNo").max = N;
     book.style.display = "block";
@@ -310,9 +341,7 @@
     buildThumbs();
     fit();
     updateUI(0);
-  };
-  probe.onerror = () => { $("msg").hidden = false; };
-  probe.src = PAGES[0];
+  });
 </script>
 </body>
 </html>
