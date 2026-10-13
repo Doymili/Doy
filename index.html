@@ -52,6 +52,14 @@
   #pageNo { width:46px; height:28px; text-align:center; border:0; border-radius:3px;
     background:#fff; color:#111; font:inherit; }
 
+  /* เต็มจอ: แถบปุ่มลอยทับ และซ่อนอัตโนมัติ */
+  body.fs #bar { position:fixed; left:0; right:0; bottom:0; z-index:30;
+    transition:opacity .25s; }
+  #bar.hide { opacity:0; pointer-events:none; }
+  #tapZone { position:fixed; left:0; right:0; bottom:0; height:56px; z-index:40; }
+  #tapZone[hidden] { display:none; }
+  body.fs #thumbs { padding-bottom:72px; }
+
   /* ดูทุกหน้า */
   #thumbs { position:absolute; inset:0; background:#1d1d1dee; z-index:20;
     overflow:auto; padding:16px; display:grid;
@@ -82,9 +90,6 @@
     <button id="btnThumbs" title="ดูทุกหน้า" aria-label="ดูทุกหน้า">
       <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/></svg>
     </button>
-    <button id="btnZoom" title="ซูม" aria-label="ซูม">
-      <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M10.5 8v5M8 10.5h5"/></svg>
-    </button>
   </div>
 
   <div class="grp">
@@ -112,6 +117,8 @@
     </button>
   </div>
 </div>
+
+<div id="tapZone" hidden></div>
 
 <script>
   // โค้ดนับจำนวนหน้าเอง: ใส่รูปชื่อ page1.jpg, page2.jpg, page3.jpg ... ต่อเนื่องกัน
@@ -406,10 +413,6 @@
   $("btnLast").onclick  = () => goTo(N - 1);
   $("btnPrev").onclick  = () => go(-1);
   $("btnNext").onclick  = () => go(1);
-  $("btnZoom").onclick = () => {
-    if (busy || !ready) return;
-    Z > 1.01 ? resetZoom() : zoomAt(stage.clientWidth / 2, stage.clientHeight / 2, 2.5);
-  };
   $("btnThumbs").onclick = () => { $("thumbs").hidden = !$("thumbs").hidden; };
   $("pageNo").onchange = e => goTo((parseInt(e.target.value, 10) || 1) - 1);
 
@@ -424,7 +427,40 @@
   if (!root.requestFullscreen) $("btnFs").style.display = "none";
   $("btnFs").onclick = () =>
     document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen();
-  document.addEventListener("fullscreenchange", () => setTimeout(fit, 300));
+  // เต็มจอ: แถบปุ่มซ่อนเอง และเรียกกลับด้วยการแตะ 2 ครั้งตรงจุดที่หายไป
+  const bar = $("bar"), tapZone = $("tapZone");
+  let hideT = 0, zt = [];
+  const isFs = () => !!document.fullscreenElement;
+
+  function hideBar() {
+    if (!isFs()) return;
+    bar.classList.add("hide");
+    tapZone.hidden = false;
+  }
+  function kick() {                       // เริ่มนับ 3 วินาทีใหม่ทุกครั้งที่กดปุ่ม
+    clearTimeout(hideT);
+    if (isFs()) hideT = setTimeout(hideBar, 3000);
+  }
+  function showBar() {
+    bar.classList.remove("hide");
+    tapZone.hidden = true;
+    kick();
+  }
+  bar.addEventListener("pointerdown", kick);
+  bar.addEventListener("input", kick);
+  tapZone.addEventListener("pointerdown", e => {
+    zt = zt.filter(t => e.timeStamp - t < 800);
+    zt.push(e.timeStamp);
+    if (zt.length >= 2) { zt = []; showBar(); }
+  });
+
+  document.addEventListener("fullscreenchange", () => {
+    document.body.classList.toggle("fs", isFs());
+    clearTimeout(hideT);
+    if (isFs()) hideBar();                // เข้าเต็มจอ: ซ่อนแถบทันที
+    else { bar.classList.remove("hide"); tapZone.hidden = true; }
+    setTimeout(fit, 300);
+  });
   window.addEventListener("resize", () => { if (ready) fit(); });
 
   // หารูปทีละชุด (8 รูปต่อรอบ) จนเจอเลขที่ไม่มีไฟล์ แล้วหยุด
