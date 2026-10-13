@@ -123,7 +123,11 @@
 <script>
   // โค้ดนับจำนวนหน้าเอง: ใส่รูปชื่อ page1.jpg, page2.jpg, page3.jpg ... ต่อเนื่องกัน
   // ในโฟลเดอร์ images/ กี่รูปก็ได้ ไม่ต้องแก้ไฟล์นี้อีก
-  const DIR = "images/";
+  // รูปเก็บใน repo แยก (เปิด GitHub Pages ไว้) แยกโฟลเดอร์ตามเล่ม
+  // เปิดเล่มด้วยลิงก์ ...github.io/Doy/?book=book1  (ไม่ใส่ ?book= จะใช้โฟลเดอร์ images/ ใน repo นี้เหมือนเดิม)
+  const BASE = "https://doymili.github.io/doy-images/";   // เปลี่ยนถ้าตั้งชื่อ repo รูปเป็นอย่างอื่น
+  const bookName = (new URLSearchParams(location.search).get("book") || "").replace(/[^\w-]/g, "");
+  const DIR = bookName ? `${BASE}${bookName}/` : "images/";
   const EXT = "jpg";      // ถ้ารูปเป็น png ให้เปลี่ยนเป็น "png"
   let PAGES = [];         // เติมอัตโนมัติตอนโหลดหน้า
 
