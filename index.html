@@ -15,7 +15,7 @@
     user-select:none; -webkit-user-select:none; }
 
   /* หน้าหนังสือ: ทุกชั้นซ้อนกันด้วย position:absolute */
-  #book { position:absolute; overflow:hidden; background:#fff;
+  #book { position:absolute; overflow:hidden; background:#fff; transform-origin:0 0;
     box-shadow:0 6px 24px #0009; display:none; }
   #book img, #book div { position:absolute; top:0; height:100%;
     pointer-events:none; -webkit-user-drag:none; }
@@ -81,6 +81,9 @@
   <div class="grp">
     <button id="btnThumbs" title="ดูทุกหน้า" aria-label="ดูทุกหน้า">
       <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/></svg>
+    </button>
+    <button id="btnZoom" title="ซูม" aria-label="ซูม">
+      <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M10.5 8v5M8 10.5h5"/></svg>
     </button>
   </div>
 
@@ -182,6 +185,7 @@
     book.style.left = (stage.clientWidth - w) / 2 + "px";
     book.style.top = (stage.clientHeight - h) / 2 + "px";
     imgBack.style.width = w + "px";
+    Z = 1; TX = 0; TY = 0; book.style.transform = "none";
     if (!turn) layout(cur, W); else render(clamp(M, 0, W));
   }
 
@@ -209,30 +213,107 @@
 
   function go(d) {
     if (busy || !ready) return;
+    resetZoom();
     if (d > 0 && cur < N - 1) { turn = { t: cur, dir: "next" }; layout(cur, W); animateTo(0); }
     else if (d < 0 && cur > 0) { turn = { t: cur - 1, dir: "prev" }; layout(cur - 1, 0); animateTo(W); }
   }
 
   function goTo(i) {
     if (busy || !ready) return;
+    resetZoom();
     cur = clamp(i, 0, N - 1);
     layout(cur, W);
     updateUI(cur);
   }
 
-  // ลากนิ้ว: รอยพับเคลื่อนตามนิ้วแบบสัมพัทธ์ ไม่กระโดด
-  let g = null;
+  // ===== ซูม: ถ่าง/บีบสองนิ้ว, แตะสองครั้ง, ล้อเมาส์ =====
+  let Z = 1, TX = 0, TY = 0;          // ระดับซูม และระยะเลื่อนของหน้าหนังสือ
+  const MAXZ = 5;
+
+  function applyZoom() {
+    const SW = stage.clientWidth, SH = stage.clientHeight;
+    const bl = book.offsetLeft, bt = book.offsetTop;
+    const sw = W * Z, sh = H * Z;
+    let x0 = bl + TX, y0 = bt + TY;
+    x0 = sw <= SW ? (SW - sw) / 2 : clamp(x0, SW - sw, 0);   // ไม่ให้เลื่อนเลยขอบภาพ
+    y0 = sh <= SH ? (SH - sh) / 2 : clamp(y0, SH - sh, 0);
+    TX = x0 - bl; TY = y0 - bt;
+    book.style.transform = `translate(${TX}px, ${TY}px) scale(${Z})`;
+  }
+
+  function resetZoom() { Z = 1; TX = 0; TY = 0; applyZoom(); }
+
+  // ซูมโดยให้จุด (cx, cy) บนหน้าจอ อยู่กับที่
+  function zoomAt(cx, cy, nz) {
+    nz = clamp(nz, 1, MAXZ);
+    const px = (cx - book.offsetLeft - TX) / Z, py = (cy - book.offsetTop - TY) / Z;
+    Z = nz;
+    TX = cx - book.offsetLeft - Z * px;
+    TY = cy - book.offsetTop - Z * py;
+    if (Z < 1.001) { Z = 1; TX = 0; TY = 0; }
+    applyZoom();
+  }
+
+  // ===== ท่าทางสัมผัส =====
+  const pts = new Map();   // นิ้วที่แตะอยู่ตอนนี้
+  let g = null;            // ท่านิ้วเดียว: พลิกหน้า หรือเลื่อนภาพตอนซูม
+  let pz = null;           // ท่าสองนิ้ว: ถ่าง/บีบเพื่อซูม
+  let lastTap = { t: 0, x: 0, y: 0 };
+
+  function track(e) {
+    const r = stage.getBoundingClientRect();
+    pts.set(e.pointerId, { x: e.clientX - r.left, y: e.clientY - r.top,
+                           cx: e.clientX, cy: e.clientY });
+  }
+
+  function startPinch() {
+    const [a, b] = [...pts.values()];
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    pz = { d0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), z0: Z,
+           px: (mx - book.offsetLeft - TX) / Z, py: (my - book.offsetTop - TY) / Z };
+  }
+
+  function updatePinch() {
+    const [a, b] = [...pts.values()];
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    // นิ้วถ่างออก = ซูมเข้า, นิ้วบีบเข้าหากัน = ซูมออก
+    Z = clamp(pz.z0 * Math.hypot(a.x - b.x, a.y - b.y) / pz.d0, 1, MAXZ);
+    TX = mx - book.offsetLeft - Z * pz.px;
+    TY = my - book.offsetTop - Z * pz.py;
+    applyZoom();
+  }
 
   stage.addEventListener("pointerdown", e => {
     if (busy || !ready || e.target.closest("#thumbs")) return;
-    g = { id: e.pointerId, sx: e.clientX, sy: e.clientY,
-          lx: e.clientX, lt: e.timeStamp, vx: 0, mode: null };
+    track(e);
     stage.setPointerCapture(e.pointerId);
+    if (pts.size === 2) {
+      if (g && (g.mode === "next" || g.mode === "prev")) {
+        // กำลังลากพลิกหน้าแล้วมีนิ้วที่สองมา: คืนหน้ากลับที่เดิม
+        const m = g.mode; g = null; pts.clear();
+        animateTo(m === "next" ? W : 0);
+        return;
+      }
+      g = null; startPinch(); return;
+    }
+    if (pts.size === 1) {
+      g = { id: e.pointerId, sx: e.clientX, sy: e.clientY, lx: e.clientX,
+            lt: e.timeStamp, vx: 0, mode: null, tx0: TX, ty0: TY };
+    }
   });
 
   stage.addEventListener("pointermove", e => {
+    if (pts.has(e.pointerId)) track(e);
+    if (pz && pts.size >= 2) { updatePinch(); return; }
     if (!g || e.pointerId !== g.id) return;
     const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
+
+    if (Z > 1.01) {                       // ซูมอยู่: นิ้วเดียว = เลื่อนดูภาพ
+      if (g.mode === null && Math.hypot(dx, dy) > 6) g.mode = "pan";
+      if (g.mode === "pan") { TX = g.tx0 + dx; TY = g.ty0 + dy; applyZoom(); }
+      return;
+    }
+
     const dt = e.timeStamp - g.lt;
     if (dt > 0) {
       g.vx = 0.6 * g.vx + 0.4 * ((e.clientX - g.lx) / dt);
@@ -251,8 +332,26 @@
   });
 
   function endGesture(e, cancelled) {
+    pts.delete(e.pointerId);
+
+    if (pz) {                             // จบท่าสองนิ้ว
+      if (pts.size < 2) {
+        pz = null;
+        if (Z < 1.03) resetZoom();
+        g = null;
+        const rest = [...pts.entries()][0];
+        if (rest) {                       // นิ้วที่เหลือ: ถ้าซูมอยู่ให้เลื่อนภาพต่อได้
+          const [id, p] = rest;
+          g = { id, sx: p.cx, sy: p.cy, lx: p.cx, lt: e.timeStamp, vx: 0,
+                mode: Z > 1.01 ? "pan" : "none", tx0: TX, ty0: TY };
+        }
+      }
+      return;
+    }
+
     if (!g || e.pointerId !== g.id) return;
     const s = g; g = null;
+
     if (s.mode === "next") {
       const done = !cancelled && ((M < W * 0.6 && s.vx < 0.3) || s.vx < -0.5);
       animateTo(done ? 0 : W);
@@ -260,17 +359,36 @@
       const done = !cancelled && ((M > W * 0.4 && s.vx > -0.3) || s.vx > 0.5);
       animateTo(done ? W : 0);
     } else if (s.mode === null && !cancelled) {
-      // แตะขอบซ้าย/ขวาของหน้าเพื่อพลิก
-      const r = book.getBoundingClientRect();
-      if (e.clientX >= r.left && e.clientX <= r.right &&
-          e.clientY >= r.top && e.clientY <= r.bottom) {
-        const x = (e.clientX - r.left) / r.width;
-        if (x < 0.3) go(-1); else if (x > 0.7) go(1);
+      // แตะเฉย ๆ: แตะกลางภาพสองครั้ง = ซูม / ย้อนกลับ, แตะขอบซ้าย-ขวา = พลิกหน้า
+      const sr = stage.getBoundingClientRect();
+      const sx = e.clientX - sr.left, sy = e.clientY - sr.top;
+      const rx = (sx - book.offsetLeft - TX) / (W * Z);
+      const ry = (sy - book.offsetTop - TY) / (H * Z);
+      if (rx < 0 || rx > 1 || ry < 0 || ry > 1) return;
+      const zoomed = Z > 1.01;
+      const edge = !zoomed && (rx < 0.3 || rx > 0.7);
+
+      if (edge) {
+        lastTap.t = 0;
+        go(rx < 0.3 ? -1 : 1);
+      } else {
+        const dbl = e.timeStamp - lastTap.t < 320 &&
+                    Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30;
+        if (dbl) { lastTap.t = 0; zoomed ? resetZoom() : zoomAt(sx, sy, 2.5); }
+        else lastTap = { t: e.timeStamp, x: e.clientX, y: e.clientY };
       }
     }
   }
   stage.addEventListener("pointerup", e => endGesture(e, false));
   stage.addEventListener("pointercancel", e => endGesture(e, true));
+
+  // ล้อเมาส์ซูม (คอมพิวเตอร์)
+  stage.addEventListener("wheel", e => {
+    if (!ready || busy || !$("thumbs").hidden) return;
+    e.preventDefault();
+    const r = stage.getBoundingClientRect();
+    zoomAt(e.clientX - r.left, e.clientY - r.top, Z * Math.exp(-e.deltaY * 0.0015));
+  }, { passive: false });
 
   // ดูทุกหน้า
   function buildThumbs() {
@@ -288,6 +406,10 @@
   $("btnLast").onclick  = () => goTo(N - 1);
   $("btnPrev").onclick  = () => go(-1);
   $("btnNext").onclick  = () => go(1);
+  $("btnZoom").onclick = () => {
+    if (busy || !ready) return;
+    Z > 1.01 ? resetZoom() : zoomAt(stage.clientWidth / 2, stage.clientHeight / 2, 2.5);
+  };
   $("btnThumbs").onclick = () => { $("thumbs").hidden = !$("thumbs").hidden; };
   $("pageNo").onchange = e => goTo((parseInt(e.target.value, 10) || 1) - 1);
 
