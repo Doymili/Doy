@@ -14,7 +14,7 @@
   #stage { flex:1; min-height:0; position:relative; touch-action:none;
     user-select:none; -webkit-user-select:none; }
 
-  /* หน้าหนังสือ: ทุกชั้นซ้อนกันด้วย position:absolute */
+  
   #book { position:absolute; overflow:hidden; background:#fff; transform-origin:0 0;
     box-shadow:0 6px 24px #0009; display:none; }
   #book img, #book div { position:absolute; top:0; height:100%;
@@ -25,7 +25,7 @@
   #shadeNext { background:linear-gradient(to right, rgba(0,0,0,.38), rgba(0,0,0,0)); }
   #shadeTop  { background:linear-gradient(to left,  rgba(0,0,0,.30), rgba(0,0,0,0)); }
 
-  /* ด้านหลังกระดาษที่พับ: กลับด้านรูป แล้วทำให้จางลง */
+  
   #strip { overflow:hidden; background:#ececef; }
   #imgBack { left:0; opacity:.5; transform:scaleX(-1); }
   #stripShade { left:0; width:100%;
@@ -37,7 +37,7 @@
     justify-content:center; text-align:center; padding:24px; color:var(--dim); }
   #msg[hidden] { display:none; }
 
-  /* แถบปุ่มด้านล่าง */
+  
   #bar { height:48px; flex:none; background:var(--bar); display:flex;
     align-items:center; justify-content:space-between; padding:0 6px;
     padding-bottom:env(safe-area-inset-bottom); }
@@ -52,7 +52,7 @@
   #pageNo { width:46px; height:28px; text-align:center; border:0; border-radius:3px;
     background:#fff; color:#111; font:inherit; }
 
-  /* เต็มจอ: แถบปุ่มลอยทับ และซ่อนอัตโนมัติ */
+  
   body.fs #bar { position:fixed; left:0; right:0; bottom:0; z-index:30;
     transition:opacity .25s; }
   #bar.hide { opacity:0; pointer-events:none; }
@@ -60,7 +60,7 @@
   #tapZone[hidden] { display:none; }
   body.fs #thumbs { padding-bottom:72px; }
 
-  /* ดูทุกหน้า */
+  
   #thumbs { position:absolute; inset:0; background:#1d1d1dee; z-index:20;
     overflow:auto; padding:16px; display:grid;
     grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:12px;
@@ -121,27 +121,23 @@
 <div id="tapZone" hidden></div>
 
 <script>
-  // โค้ดนับจำนวนหน้าเอง: ใส่รูปชื่อ page1.jpg, page2.jpg, page3.jpg ... ต่อเนื่องกัน
-  // ในโฟลเดอร์ images/ กี่รูปก็ได้ ไม่ต้องแก้ไฟล์นี้อีก
-  // รูปเก็บใน repo แยก (เปิด GitHub Pages ไว้) แยกโฟลเดอร์ตามเล่ม
-  // เปิดเล่มด้วยลิงก์ ...github.io/Doy/?book=book1  (ไม่ใส่ ?book= จะใช้โฟลเดอร์ images/ ใน repo นี้เหมือนเดิม)
-  const BASE = "https://doymili.github.io/doy-images/";   // เปลี่ยนถ้าตั้งชื่อ repo รูปเป็นอย่างอื่น
+  
+  const BASE = "https://doymili.github.io/doy-images/";   
   const bookName = (new URLSearchParams(location.search).get("book") || "").replace(/[^\w-]/g, "");
   const DIR = bookName ? `${BASE}${bookName}/` : "images/";
-  const EXT = "jpg";      // ถ้ารูปเป็น png ให้เปลี่ยนเป็น "png"
-  let PAGES = [];         // เติมอัตโนมัติตอนโหลดหน้า
-
+  const EXT = "jpg";     
+  let PAGES = [];         
   const $ = id => document.getElementById(id);
   const stage = $("stage"), book = $("book");
   const imgTop = $("imgTop"), imgUnder = $("imgUnder"), imgBack = $("imgBack");
   const strip = $("strip"), shadeTop = $("shadeTop"), shadeNext = $("shadeNext");
-  let N = 0;            // จำนวนหน้า (นับอัตโนมัติ)
+  let N = 0;           
 
-  let cur = 0;          // หน้าปัจจุบัน (เริ่มที่ 0)
-  let W = 0, H = 0;     // ขนาดหน้าหนังสือ (px)
-  let ratio = 1;        // สูง / กว้าง ของรูป
-  let M = 0;            // ตำแหน่งรอยพับ: W = ยังไม่พลิก, 0 = พลิกเสร็จแล้ว
-  let turn = null;      // { t: หน้าที่กำลังพลิก, dir: "next" | "prev" }
+  let cur = 0;          
+  let W = 0, H = 0;     
+  let ratio = 1;        
+  let M = 0;            
+  let turn = null;      
   let busy = false, ready = false, raf = 0;
 
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -153,22 +149,22 @@
     if (el.getAttribute("src") !== s) el.src = s;
   }
 
-  // ตั้งชั้นรูป: หน้า t อยู่บน, หน้า t+1 อยู่ข้างใต้
+  
   function layout(t, m) {
     setSrc(imgTop, t); setSrc(imgBack, t); setSrc(imgUnder, t + 1);
     render(m);
   }
 
-  // วาดตามตำแหน่งรอยพับ m
+ 
   function render(m) {
     M = m;
-    const sw = W - m;                           // ความกว้างแถบด้านหลังกระดาษ
+    const sw = W - m;                           
     imgTop.style.clipPath = `inset(0 ${sw}px 0 0)`;
     if (sw < 0.5) {
       strip.style.display = shadeTop.style.display = shadeNext.style.display = "none";
       return;
     }
-    const f = 2 * m - W;                        // ขอบซ้ายของแถบ (มุมกระดาษ)
+    const f = 2 * m - W;                        
     strip.style.display = "block";
     strip.style.left = f + "px";
     strip.style.width = sw + "px";
@@ -237,8 +233,8 @@
     updateUI(cur);
   }
 
-  // ===== ซูม: ถ่าง/บีบสองนิ้ว, แตะสองครั้ง, ล้อเมาส์ =====
-  let Z = 1, TX = 0, TY = 0;          // ระดับซูม และระยะเลื่อนของหน้าหนังสือ
+  
+  let Z = 1, TX = 0, TY = 0;         
   const MAXZ = 5;
 
   function applyZoom() {
@@ -246,7 +242,7 @@
     const bl = book.offsetLeft, bt = book.offsetTop;
     const sw = W * Z, sh = H * Z;
     let x0 = bl + TX, y0 = bt + TY;
-    x0 = sw <= SW ? (SW - sw) / 2 : clamp(x0, SW - sw, 0);   // ไม่ให้เลื่อนเลยขอบภาพ
+    x0 = sw <= SW ? (SW - sw) / 2 : clamp(x0, SW - sw, 0);   
     y0 = sh <= SH ? (SH - sh) / 2 : clamp(y0, SH - sh, 0);
     TX = x0 - bl; TY = y0 - bt;
     book.style.transform = `translate(${TX}px, ${TY}px) scale(${Z})`;
@@ -254,7 +250,7 @@
 
   function resetZoom() { Z = 1; TX = 0; TY = 0; applyZoom(); }
 
-  // ซูมโดยให้จุด (cx, cy) บนหน้าจอ อยู่กับที่
+  
   function zoomAt(cx, cy, nz) {
     nz = clamp(nz, 1, MAXZ);
     const px = (cx - book.offsetLeft - TX) / Z, py = (cy - book.offsetTop - TY) / Z;
@@ -265,10 +261,10 @@
     applyZoom();
   }
 
-  // ===== ท่าทางสัมผัส =====
-  const pts = new Map();   // นิ้วที่แตะอยู่ตอนนี้
-  let g = null;            // ท่านิ้วเดียว: พลิกหน้า หรือเลื่อนภาพตอนซูม
-  let pz = null;           // ท่าสองนิ้ว: ถ่าง/บีบเพื่อซูม
+  
+  const pts = new Map();   
+  let g = null;            
+  let pz = null;           
   let lastTap = { t: 0, x: 0, y: 0 };
 
   function track(e) {
@@ -287,7 +283,7 @@
   function updatePinch() {
     const [a, b] = [...pts.values()];
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    // นิ้วถ่างออก = ซูมเข้า, นิ้วบีบเข้าหากัน = ซูมออก
+    
     Z = clamp(pz.z0 * Math.hypot(a.x - b.x, a.y - b.y) / pz.d0, 1, MAXZ);
     TX = mx - book.offsetLeft - Z * pz.px;
     TY = my - book.offsetTop - Z * pz.py;
@@ -300,7 +296,7 @@
     stage.setPointerCapture(e.pointerId);
     if (pts.size === 2) {
       if (g && (g.mode === "next" || g.mode === "prev")) {
-        // กำลังลากพลิกหน้าแล้วมีนิ้วที่สองมา: คืนหน้ากลับที่เดิม
+        
         const m = g.mode; g = null; pts.clear();
         animateTo(m === "next" ? W : 0);
         return;
@@ -345,13 +341,13 @@
   function endGesture(e, cancelled) {
     pts.delete(e.pointerId);
 
-    if (pz) {                             // จบท่าสองนิ้ว
+    if (pz) {                            
       if (pts.size < 2) {
         pz = null;
         if (Z < 1.03) resetZoom();
         g = null;
         const rest = [...pts.entries()][0];
-        if (rest) {                       // นิ้วที่เหลือ: ถ้าซูมอยู่ให้เลื่อนภาพต่อได้
+        if (rest) {                       
           const [id, p] = rest;
           g = { id, sx: p.cx, sy: p.cy, lx: p.cx, lt: e.timeStamp, vx: 0,
                 mode: Z > 1.01 ? "pan" : "none", tx0: TX, ty0: TY };
@@ -370,7 +366,7 @@
       const done = !cancelled && ((M > W * 0.4 && s.vx > -0.3) || s.vx > 0.5);
       animateTo(done ? W : 0);
     } else if (s.mode === null && !cancelled) {
-      // แตะเฉย ๆ: แตะกลางภาพสองครั้ง = ซูม / ย้อนกลับ, แตะขอบซ้าย-ขวา = พลิกหน้า
+      
       const sr = stage.getBoundingClientRect();
       const sx = e.clientX - sr.left, sy = e.clientY - sr.top;
       const rx = (sx - book.offsetLeft - TX) / (W * Z);
@@ -393,7 +389,7 @@
   stage.addEventListener("pointerup", e => endGesture(e, false));
   stage.addEventListener("pointercancel", e => endGesture(e, true));
 
-  // ล้อเมาส์ซูม (คอมพิวเตอร์)
+ 
   stage.addEventListener("wheel", e => {
     if (!ready || busy || !$("thumbs").hidden) return;
     e.preventDefault();
@@ -401,7 +397,7 @@
     zoomAt(e.clientX - r.left, e.clientY - r.top, Z * Math.exp(-e.deltaY * 0.0015));
   }, { passive: false });
 
-  // ดูทุกหน้า
+  
   function buildThumbs() {
     const box = $("thumbs");
     PAGES.forEach((src, i) => {
@@ -412,7 +408,7 @@
     });
   }
 
-  // ปุ่มควบคุม
+  
   $("btnFirst").onclick = () => goTo(0);
   $("btnLast").onclick  = () => goTo(N - 1);
   $("btnPrev").onclick  = () => go(-1);
@@ -426,12 +422,12 @@
     if (e.key === "ArrowLeft")  go(-1);
   });
 
-  // เต็มจอ (iPhone Safari ไม่รองรับสำหรับหน้าเว็บทั่วไป จึงซ่อนปุ่มไว้)
+  
   const root = document.documentElement;
   if (!root.requestFullscreen) $("btnFs").style.display = "none";
   $("btnFs").onclick = () =>
     document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen();
-  // เต็มจอ: แถบปุ่มซ่อนเอง และเรียกกลับด้วยการแตะ 2 ครั้งตรงจุดที่หายไป
+  
   const bar = $("bar"), tapZone = $("tapZone");
   let hideT = 0, zt = [];
   const isFs = () => !!document.fullscreenElement;
@@ -441,7 +437,7 @@
     bar.classList.add("hide");
     tapZone.hidden = false;
   }
-  function kick() {                       // เริ่มนับ 3 วินาทีใหม่ทุกครั้งที่กดปุ่ม
+  function kick() {                       
     clearTimeout(hideT);
     if (isFs()) hideT = setTimeout(hideBar, 3000);
   }
@@ -461,13 +457,13 @@
   document.addEventListener("fullscreenchange", () => {
     document.body.classList.toggle("fs", isFs());
     clearTimeout(hideT);
-    if (isFs()) hideBar();                // เข้าเต็มจอ: ซ่อนแถบทันที
+    if (isFs()) hideBar();                
     else { bar.classList.remove("hide"); tapZone.hidden = true; }
     setTimeout(fit, 300);
   });
   window.addEventListener("resize", () => { if (ready) fit(); });
 
-  // หารูปทีละชุด (8 รูปต่อรอบ) จนเจอเลขที่ไม่มีไฟล์ แล้วหยุด
+  
   function tryLoad(src) {
     return new Promise(res => {
       const im = new Image();
@@ -492,7 +488,7 @@
 
   discover().then(imgs => {
     if (!imgs.length) { $("msg").hidden = false; return; }
-    window._pageCache = imgs;                      // เก็บไว้ให้รูปโหลดล่วงหน้าค้างใน cache
+    window._pageCache = imgs;                      
     PAGES = imgs.map((_, k) => `${DIR}page${k + 1}.${EXT}`);
     N = PAGES.length;
     ratio = imgs[0].naturalHeight / imgs[0].naturalWidth;
