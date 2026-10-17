@@ -2,504 +2,203 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Flipbook</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ชั้นหนังสือ</title>
+<script>
+  // ลิงก์เก่าแบบ ?book=... ให้เด้งไปหน้าอ่านเหมือนเดิม
+  (function () {
+    const b = new URLSearchParams(location.search).get("book");
+    if (b) location.replace("reader.html?book=" + b.split("/").map(encodeURIComponent).join("/"));
+  })();
+</script>
 <style>
-  :root { --bg:#555; --bar:#2a2a2a; --ink:#e8e8e8; --dim:#9a9a9a; }
-  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
-    font:14px/1.4 system-ui, sans-serif; overflow:hidden; }
-  body { display:flex; flex-direction:column; height:100dvh; }
+  :root {
+    --ch: 156px;      /* ความสูงปกหนังสือ */
+    --plank: 14px;    /* ความหนาไม้กระดานชั้นวาง */
+    --cap: 40px;      /* พื้นที่ชื่อเรื่องใต้ชั้น */
+    --tile: calc(var(--ch) + var(--plank) + 4px + var(--cap));
+    --ink: #f1e6d6;
+    --dim: #b9a58c;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: radial-gradient(120% 80% at 50% 0%, #3a2a1e 0%, #1c140e 60%, #120c08 100%) fixed;
+    color: var(--ink);
+    font: 15px/1.4 "Noto Serif Thai", Georgia, "Times New Roman", serif;
+  }
 
-  #stage { flex:1; min-height:0; position:relative; touch-action:none;
-    user-select:none; -webkit-user-select:none; }
+  header { padding: 30px 20px 14px; text-align: center; }
+  h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: .04em; }
+  .sub { margin-top: 4px; color: var(--dim); font-size: 13px; }
+  main { max-width: 960px; margin: 0 auto; padding: 10px 0 56px; }
 
-  
-  #book { position:absolute; overflow:hidden; background:#fff; transform-origin:0 0;
-    box-shadow:0 6px 24px #0009; display:none; }
-  #book img, #book div { position:absolute; top:0; height:100%;
-    pointer-events:none; -webkit-user-drag:none; }
-  #imgUnder, #imgTop { left:0; width:100%; }
+  /* ชั้นวาง: แต่ละแถวมีไม้กระดานรองอยู่ใต้ปก */
+  .shelf {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    grid-auto-rows: var(--tile);
+    padding: 0 10px;
+    background-image: linear-gradient(to bottom,
+      transparent 0, transparent var(--ch),
+      #a67c4e var(--ch), #a67c4e calc(var(--ch) + 3px),
+      #6e4a29 calc(var(--ch) + 3px), #54371c calc(var(--ch) + var(--plank)),
+      rgba(0,0,0,.35) calc(var(--ch) + var(--plank)),
+      transparent calc(var(--ch) + var(--plank) + 10px));
+    background-size: 100% var(--tile);
+    background-repeat: repeat-y;
+  }
 
-  .shade { width:0; }
-  #shadeNext { background:linear-gradient(to right, rgba(0,0,0,.38), rgba(0,0,0,0)); }
-  #shadeTop  { background:linear-gradient(to left,  rgba(0,0,0,.30), rgba(0,0,0,0)); }
+  .cell {
+    background: none; border: 0; padding: 0 6px; margin: 0;
+    color: inherit; font: inherit; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .cell .cv { width: 100%; height: var(--ch); display: flex;
+    align-items: flex-end; justify-content: center; }
+  .cell img, .cell .ph {
+    height: calc(var(--ch) - 6px); width: auto; max-width: 100%;
+    object-fit: cover; border-radius: 2px 5px 5px 2px;
+    box-shadow: 0 7px 10px rgba(0,0,0,.55), inset 3px 0 4px rgba(255,255,255,.12);
+    transition: transform .15s;
+  }
+  .cell:hover img, .cell:active img { transform: translateY(-5px); }
+  .cell:focus-visible { outline: 2px solid #e9c58f; outline-offset: -2px; }
+  .cell .ph { width: 104px; background: #3b2c20; color: var(--dim);
+    display: grid; place-items: center; font-size: 34px; }
+  .cell .cap {
+    margin-top: calc(var(--plank) + 4px); max-width: 100%;
+    font-size: 13px; line-height: 1.3; text-align: center;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; overflow-wrap: anywhere;
+  }
 
-  
-  #strip { overflow:hidden; background:#ececef; }
-  #imgBack { left:0; opacity:.5; transform:scaleX(-1); }
-  #stripShade { left:0; width:100%;
-    background:linear-gradient(to right,
-      rgba(0,0,0,.22) 0%, rgba(255,255,255,.55) 14%,
-      rgba(255,255,255,.30) 80%, rgba(0,0,0,.30) 100%); }
+  #msg { padding: 40px 24px; text-align: center; color: var(--dim); }
 
-  #msg { position:absolute; inset:0; display:flex; align-items:center;
-    justify-content:center; text-align:center; padding:24px; color:var(--dim); }
-  #msg[hidden] { display:none; }
-
-  
-  #bar { height:48px; flex:none; background:var(--bar); display:flex;
-    align-items:center; justify-content:space-between; padding:0 6px;
-    padding-bottom:env(safe-area-inset-bottom); }
-  #bar .grp { display:flex; align-items:center; gap:2px; }
-  button { background:none; border:0; color:var(--ink); width:40px; height:40px;
-    border-radius:6px; display:grid; place-items:center; cursor:pointer; }
-  button:active { background:#ffffff22; }
-  button:focus-visible { outline:2px solid #fff; outline-offset:-2px; }
-  button svg { width:20px; height:20px; fill:none; stroke:currentColor;
-    stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
-  #pageBox { display:flex; align-items:center; gap:4px; color:var(--dim); margin:0 4px; }
-  #pageNo { width:46px; height:28px; text-align:center; border:0; border-radius:3px;
-    background:#fff; color:#111; font:inherit; }
-
-  
-  body.fs #bar { position:fixed; left:0; right:0; bottom:0; z-index:30;
-    transition:opacity .25s; }
-  #bar.hide { opacity:0; pointer-events:none; }
-  #tapZone { position:fixed; left:0; right:0; bottom:0; height:56px; z-index:40; }
-  #tapZone[hidden] { display:none; }
-  body.fs #thumbs { padding-bottom:72px; }
-
-  
-  #thumbs { position:absolute; inset:0; background:#1d1d1dee; z-index:20;
-    overflow:auto; padding:16px; display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:12px;
-    align-content:start; touch-action:pan-y; }
-  #thumbs[hidden] { display:none; }
-  #thumbs figure { margin:0; cursor:pointer; text-align:center; color:var(--dim); }
-  #thumbs img { width:100%; display:block; border:2px solid transparent; border-radius:3px; }
-  #thumbs figure.on img { border-color:#fff; }
+  /* หน้าต่างเลือกเล่ม */
+  #sheet { position: fixed; inset: 0; z-index: 10; background: rgba(8,5,3,.72);
+    display: flex; align-items: flex-end; justify-content: center; }
+  .panel { width: 100%; max-width: 640px; max-height: 82dvh; overflow: auto;
+    background: linear-gradient(#2b1f15, #1c140e); border-top: 1px solid #5a3f27;
+    border-radius: 16px 16px 0 0; padding: 14px 0 28px; }
+  .head { display: flex; align-items: center; justify-content: space-between;
+    padding: 0 8px 12px 20px; }
+  .head h2 { margin: 0; font-size: 18px; font-weight: 600; }
+  #sheetClose { background: none; border: 0; color: var(--ink); width: 40px; height: 40px;
+    font-size: 20px; border-radius: 8px; cursor: pointer; }
+  #sheetClose:active { background: #ffffff22; }
 </style>
 </head>
 <body>
 
-<div id="stage">
-  <div id="book">
-    <img id="imgUnder" alt="">
-    <div id="shadeNext" class="shade"></div>
-    <img id="imgTop" alt="">
-    <div id="shadeTop" class="shade"></div>
-    <div id="strip"><img id="imgBack" alt=""><div id="stripShade"></div></div>
-  </div>
-  <div id="msg" hidden>ไม่พบรูป ตรวจสอบว่ามีไฟล์ images/page1.jpg และชื่อเรียงต่อเนื่องกัน</div>
-  <div id="thumbs" hidden></div>
-</div>
+<header>
+  <h1 id="siteTitle">ชั้นหนังสือ</h1>
+  <div class="sub">แตะหนังสือเพื่อเลือกเล่ม</div>
+</header>
 
-<div id="bar">
-  <div class="grp">
-    <button id="btnThumbs" title="ดูทุกหน้า" aria-label="ดูทุกหน้า">
-      <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/></svg>
-    </button>
-  </div>
+<main>
+  <div id="shelf" class="shelf"></div>
+  <div id="msg" hidden>ไม่พบไฟล์ library.json หรือยังไม่มีรายการหนังสือ</div>
+</main>
 
-  <div class="grp">
-    <button id="btnFirst" title="หน้าแรก" aria-label="หน้าแรก">
-      <svg viewBox="0 0 24 24"><path d="M6 5v14M18 6l-8 6 8 6"/></svg>
-    </button>
-    <button id="btnPrev" title="ก่อนหน้า" aria-label="ก่อนหน้า">
-      <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
-    </button>
-    <div id="pageBox">
-      <input id="pageNo" type="number" inputmode="numeric" min="1" value="1" aria-label="เลขหน้า">
-      <span>/ <span id="pageTotal">0</span></span>
+<div id="sheet" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="head">
+      <h2 id="sheetTitle"></h2>
+      <button id="sheetClose" aria-label="ปิด">✕</button>
     </div>
-    <button id="btnNext" title="ถัดไป" aria-label="ถัดไป">
-      <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-    </button>
-    <button id="btnLast" title="หน้าสุดท้าย" aria-label="หน้าสุดท้าย">
-      <svg viewBox="0 0 24 24"><path d="M18 5v14M6 6l8 6-8 6"/></svg>
-    </button>
-  </div>
-
-  <div class="grp">
-    <button id="btnFs" title="เต็มจอ" aria-label="เต็มจอ">
-      <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
-    </button>
+    <div id="vols" class="shelf"></div>
   </div>
 </div>
-
-<div id="tapZone" hidden></div>
 
 <script>
-  
-  const BASE = "https://doymili.github.io/doy-images/";   
-  const bookName = (new URLSearchParams(location.search).get("book") || "").replace(/[^\w-]/g, "");
-  const DIR = bookName ? `${BASE}${bookName}/` : "images/";
-  const EXT = "jpg";     
-  let PAGES = [];         
+  // repo เก็บรูป (เปิด GitHub Pages ไว้) และนามสกุลรูป
+  const BASE = "https://doymili.github.io/doy-images/";
+  const EXT = "jpg";
+  // รายการเรื่อง/เล่มอยู่ในไฟล์ library.json (แก้ไฟล์นั้นเมื่อเพิ่มหนังสือ)
+
   const $ = id => document.getElementById(id);
-  const stage = $("stage"), book = $("book");
-  const imgTop = $("imgTop"), imgUnder = $("imgUnder"), imgBack = $("imgBack");
-  const strip = $("strip"), shadeTop = $("shadeTop"), shadeNext = $("shadeNext");
-  let N = 0;           
+  let LIB = null;
 
-  let cur = 0;          
-  let W = 0, H = 0;     
-  let ratio = 1;        
-  let M = 0;            
-  let turn = null;      
-  let busy = false, ready = false, raf = 0;
-
-  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-
-  function setSrc(el, i) {
-    const s = PAGES[i];
-    if (s === undefined) { el.style.visibility = "hidden"; return; }
-    el.style.visibility = "visible";
-    if (el.getAttribute("src") !== s) el.src = s;
-  }
-
-  
-  function layout(t, m) {
-    setSrc(imgTop, t); setSrc(imgBack, t); setSrc(imgUnder, t + 1);
-    render(m);
-  }
-
- 
-  function render(m) {
-    M = m;
-    const sw = W - m;                           
-    imgTop.style.clipPath = `inset(0 ${sw}px 0 0)`;
-    if (sw < 0.5) {
-      strip.style.display = shadeTop.style.display = shadeNext.style.display = "none";
-      return;
-    }
-    const f = 2 * m - W;                        
-    strip.style.display = "block";
-    strip.style.left = f + "px";
-    strip.style.width = sw + "px";
-    shadeTop.style.display = "block";
-    shadeTop.style.left = (f - 30) + "px";
-    shadeTop.style.width = "30px";
-    shadeNext.style.display = m > 1 ? "block" : "none";
-    shadeNext.style.left = m + "px";
-    shadeNext.style.width = "40px";
-  }
-
-  function updateUI(i) {
-    $("pageNo").value = i + 1;
-    document.querySelectorAll("#thumbs figure").forEach((f, k) =>
-      f.classList.toggle("on", k === i));
-  }
-
-  function fit() {
-    const aw = stage.clientWidth - 20, ah = stage.clientHeight - 24;
-    let w = aw, h = w * ratio;
-    if (h > ah) { h = ah; w = h / ratio; }
-    W = w; H = h;
-    book.style.width = w + "px";
-    book.style.height = h + "px";
-    book.style.left = (stage.clientWidth - w) / 2 + "px";
-    book.style.top = (stage.clientHeight - h) / 2 + "px";
-    imgBack.style.width = w + "px";
-    Z = 1; TX = 0; TY = 0; book.style.transform = "none";
-    if (!turn) layout(cur, W); else render(clamp(M, 0, W));
-  }
-
-  function finish() {
-    cur = M >= W - 0.5 ? turn.t : turn.t + 1;
-    turn = null; busy = false;
-    layout(cur, W);
-    updateUI(cur);
-  }
-
-  function animateTo(target) {
-    busy = true;
-    cancelAnimationFrame(raf);
-    const from = M, t0 = performance.now();
-    const dur = Math.max(160, 480 * Math.abs(target - from) / W);
-    const step = now => {
-      const k = Math.min(1, (now - t0) / dur);
-      const e = 1 - Math.pow(1 - k, 3);
-      render(from + (target - from) * e);
-      if (k < 1) raf = requestAnimationFrame(step);
-      else { render(target); finish(); }
+  function cover(src, label) {
+    const wrap = document.createElement("div");
+    wrap.className = "cv";
+    const img = new Image();
+    img.alt = label;
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.onerror = () => {                       // ไม่มีรูปปก: แสดงตัวอักษรแรกแทน
+      const ph = document.createElement("div");
+      ph.className = "ph";
+      ph.textContent = label.slice(0, 1);
+      img.replaceWith(ph);
     };
-    raf = requestAnimationFrame(step);
+    if (src) img.src = src; else img.onerror();
+    wrap.appendChild(img);
+    return wrap;
   }
 
-  function go(d) {
-    if (busy || !ready) return;
-    resetZoom();
-    if (d > 0 && cur < N - 1) { turn = { t: cur, dir: "next" }; layout(cur, W); animateTo(0); }
-    else if (d < 0 && cur > 0) { turn = { t: cur - 1, dir: "prev" }; layout(cur - 1, 0); animateTo(W); }
+  function cell(label, src, onClick) {
+    const b = document.createElement("button");
+    b.className = "cell";
+    b.type = "button";
+    b.appendChild(cover(src, label));
+    const cap = document.createElement("span");
+    cap.className = "cap";
+    cap.textContent = label;
+    b.appendChild(cap);
+    b.onclick = onClick;
+    return b;
   }
 
-  function goTo(i) {
-    if (busy || !ready) return;
-    resetZoom();
-    cur = clamp(i, 0, N - 1);
-    layout(cur, W);
-    updateUI(cur);
-  }
-
-  
-  let Z = 1, TX = 0, TY = 0;         
-  const MAXZ = 5;
-
-  function applyZoom() {
-    const SW = stage.clientWidth, SH = stage.clientHeight;
-    const bl = book.offsetLeft, bt = book.offsetTop;
-    const sw = W * Z, sh = H * Z;
-    let x0 = bl + TX, y0 = bt + TY;
-    x0 = sw <= SW ? (SW - sw) / 2 : clamp(x0, SW - sw, 0);   
-    y0 = sh <= SH ? (SH - sh) / 2 : clamp(y0, SH - sh, 0);
-    TX = x0 - bl; TY = y0 - bt;
-    book.style.transform = `translate(${TX}px, ${TY}px) scale(${Z})`;
-  }
-
-  function resetZoom() { Z = 1; TX = 0; TY = 0; applyZoom(); }
-
-  
-  function zoomAt(cx, cy, nz) {
-    nz = clamp(nz, 1, MAXZ);
-    const px = (cx - book.offsetLeft - TX) / Z, py = (cy - book.offsetTop - TY) / Z;
-    Z = nz;
-    TX = cx - book.offsetLeft - Z * px;
-    TY = cy - book.offsetTop - Z * py;
-    if (Z < 1.001) { Z = 1; TX = 0; TY = 0; }
-    applyZoom();
-  }
-
-  
-  const pts = new Map();   
-  let g = null;            
-  let pz = null;           
-  let lastTap = { t: 0, x: 0, y: 0 };
-
-  function track(e) {
-    const r = stage.getBoundingClientRect();
-    pts.set(e.pointerId, { x: e.clientX - r.left, y: e.clientY - r.top,
-                           cx: e.clientX, cy: e.clientY });
-  }
-
-  function startPinch() {
-    const [a, b] = [...pts.values()];
-    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    pz = { d0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), z0: Z,
-           px: (mx - book.offsetLeft - TX) / Z, py: (my - book.offsetTop - TY) / Z };
-  }
-
-  function updatePinch() {
-    const [a, b] = [...pts.values()];
-    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    
-    Z = clamp(pz.z0 * Math.hypot(a.x - b.x, a.y - b.y) / pz.d0, 1, MAXZ);
-    TX = mx - book.offsetLeft - Z * pz.px;
-    TY = my - book.offsetTop - Z * pz.py;
-    applyZoom();
-  }
-
-  stage.addEventListener("pointerdown", e => {
-    if (busy || !ready || e.target.closest("#thumbs")) return;
-    track(e);
-    stage.setPointerCapture(e.pointerId);
-    if (pts.size === 2) {
-      if (g && (g.mode === "next" || g.mode === "prev")) {
-        
-        const m = g.mode; g = null; pts.clear();
-        animateTo(m === "next" ? W : 0);
-        return;
-      }
-      g = null; startPinch(); return;
-    }
-    if (pts.size === 1) {
-      g = { id: e.pointerId, sx: e.clientX, sy: e.clientY, lx: e.clientX,
-            lt: e.timeStamp, vx: 0, mode: null, tx0: TX, ty0: TY };
-    }
-  });
-
-  stage.addEventListener("pointermove", e => {
-    if (pts.has(e.pointerId)) track(e);
-    if (pz && pts.size >= 2) { updatePinch(); return; }
-    if (!g || e.pointerId !== g.id) return;
-    const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
-
-    if (Z > 1.01) {                       // ซูมอยู่: นิ้วเดียว = เลื่อนดูภาพ
-      if (g.mode === null && Math.hypot(dx, dy) > 6) g.mode = "pan";
-      if (g.mode === "pan") { TX = g.tx0 + dx; TY = g.ty0 + dy; applyZoom(); }
-      return;
-    }
-
-    const dt = e.timeStamp - g.lt;
-    if (dt > 0) {
-      g.vx = 0.6 * g.vx + 0.4 * ((e.clientX - g.lx) / dt);
-      g.lx = e.clientX; g.lt = e.timeStamp;
-    }
-    if (g.mode === null) {
-      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
-        if (dx < 0 && cur < N - 1) { turn = { t: cur, dir: "next" }; g.mode = "next"; layout(cur, W); }
-        else if (dx > 0 && cur > 0) { turn = { t: cur - 1, dir: "prev" }; g.mode = "prev"; layout(cur - 1, 0); }
-        else g.mode = "none";
-      } else if (Math.abs(dy) > 8) g.mode = "none";
-      else return;
-    }
-    if (g.mode === "next") render(clamp(W + dx, 0, W));
-    else if (g.mode === "prev") render(clamp(dx, 0, W));
-  });
-
-  function endGesture(e, cancelled) {
-    pts.delete(e.pointerId);
-
-    if (pz) {                            
-      if (pts.size < 2) {
-        pz = null;
-        if (Z < 1.03) resetZoom();
-        g = null;
-        const rest = [...pts.entries()][0];
-        if (rest) {                       
-          const [id, p] = rest;
-          g = { id, sx: p.cx, sy: p.cy, lx: p.cx, lt: e.timeStamp, vx: 0,
-                mode: Z > 1.01 ? "pan" : "none", tx0: TX, ty0: TY };
-        }
-      }
-      return;
-    }
-
-    if (!g || e.pointerId !== g.id) return;
-    const s = g; g = null;
-
-    if (s.mode === "next") {
-      const done = !cancelled && ((M < W * 0.6 && s.vx < 0.3) || s.vx < -0.5);
-      animateTo(done ? 0 : W);
-    } else if (s.mode === "prev") {
-      const done = !cancelled && ((M > W * 0.4 && s.vx > -0.3) || s.vx > 0.5);
-      animateTo(done ? W : 0);
-    } else if (s.mode === null && !cancelled) {
-      
-      const sr = stage.getBoundingClientRect();
-      const sx = e.clientX - sr.left, sy = e.clientY - sr.top;
-      const rx = (sx - book.offsetLeft - TX) / (W * Z);
-      const ry = (sy - book.offsetTop - TY) / (H * Z);
-      if (rx < 0 || rx > 1 || ry < 0 || ry > 1) return;
-      const zoomed = Z > 1.01;
-      const edge = !zoomed && (rx < 0.3 || rx > 0.7);
-
-      if (edge) {
-        lastTap.t = 0;
-        go(rx < 0.3 ? -1 : 1);
-      } else {
-        const dbl = e.timeStamp - lastTap.t < 320 &&
-                    Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30;
-        if (dbl) { lastTap.t = 0; zoomed ? resetZoom() : zoomAt(sx, sy, 2.5); }
-        else lastTap = { t: e.timeStamp, x: e.clientX, y: e.clientY };
-      }
-    }
-  }
-  stage.addEventListener("pointerup", e => endGesture(e, false));
-  stage.addEventListener("pointercancel", e => endGesture(e, true));
-
- 
-  stage.addEventListener("wheel", e => {
-    if (!ready || busy || !$("thumbs").hidden) return;
-    e.preventDefault();
-    const r = stage.getBoundingClientRect();
-    zoomAt(e.clientX - r.left, e.clientY - r.top, Z * Math.exp(-e.deltaY * 0.0015));
-  }, { passive: false });
-
-  
-  function buildThumbs() {
-    const box = $("thumbs");
-    PAGES.forEach((src, i) => {
-      const f = document.createElement("figure");
-      f.innerHTML = `<img src="${src}" alt="หน้า ${i + 1}" loading="lazy"><figcaption>${i + 1}</figcaption>`;
-      f.onclick = () => { box.hidden = true; goTo(i); };
-      box.appendChild(f);
+  function renderShelf() {
+    const shelf = $("shelf");
+    shelf.textContent = "";
+    LIB.series.forEach((s, i) => {
+      const first = (s.volumes || [])[0];
+      const src = s.cover ? BASE + s.cover
+                : first ? `${BASE}${first.path}/page1.${EXT}` : "";
+      shelf.appendChild(cell(s.title, src, () => openSeries(i)));
     });
   }
 
-  
-  $("btnFirst").onclick = () => goTo(0);
-  $("btnLast").onclick  = () => goTo(N - 1);
-  $("btnPrev").onclick  = () => go(-1);
-  $("btnNext").onclick  = () => go(1);
-  $("btnThumbs").onclick = () => { $("thumbs").hidden = !$("thumbs").hidden; };
-  $("pageNo").onchange = e => goTo((parseInt(e.target.value, 10) || 1) - 1);
-
-  document.addEventListener("keydown", e => {
-    if (e.target.tagName === "INPUT") return;
-    if (e.key === "ArrowRight") go(1);
-    if (e.key === "ArrowLeft")  go(-1);
-  });
-
-  
-  const root = document.documentElement;
-  if (!root.requestFullscreen) $("btnFs").style.display = "none";
-  $("btnFs").onclick = () =>
-    document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen();
-  
-  const bar = $("bar"), tapZone = $("tapZone");
-  let hideT = 0, zt = [];
-  const isFs = () => !!document.fullscreenElement;
-
-  function hideBar() {
-    if (!isFs()) return;
-    bar.classList.add("hide");
-    tapZone.hidden = false;
-  }
-  function kick() {                       
-    clearTimeout(hideT);
-    if (isFs()) hideT = setTimeout(hideBar, 3000);
-  }
-  function showBar() {
-    bar.classList.remove("hide");
-    tapZone.hidden = true;
-    kick();
-  }
-  bar.addEventListener("pointerdown", kick);
-  bar.addEventListener("input", kick);
-  tapZone.addEventListener("pointerdown", e => {
-    zt = zt.filter(t => e.timeStamp - t < 800);
-    zt.push(e.timeStamp);
-    if (zt.length >= 2) { zt = []; showBar(); }
-  });
-
-  document.addEventListener("fullscreenchange", () => {
-    document.body.classList.toggle("fs", isFs());
-    clearTimeout(hideT);
-    if (isFs()) hideBar();                
-    else { bar.classList.remove("hide"); tapZone.hidden = true; }
-    setTimeout(fit, 300);
-  });
-  window.addEventListener("resize", () => { if (ready) fit(); });
-
-  
-  function tryLoad(src) {
-    return new Promise(res => {
-      const im = new Image();
-      im.onload = () => res(im);
-      im.onerror = () => res(null);
-      im.src = src;
+  function openSeries(i) {
+    const s = LIB.series[i];
+    $("sheetTitle").textContent = s.title;
+    const box = $("vols");
+    box.textContent = "";
+    (s.volumes || []).forEach(v => {
+      box.appendChild(cell(v.name, `${BASE}${v.path}/page1.${EXT}`, () => {
+        location.href = "reader.html?book=" + encodeURI(v.path);
+      }));
     });
+    $("sheet").hidden = false;
+    document.body.style.overflow = "hidden";
+    history.pushState({ sheet: true }, "");      // ให้ปุ่มย้อนกลับของมือถือปิดหน้าต่างนี้
   }
 
-  async function discover() {
-    const found = [];
-    for (let i = 1; i <= 1000; i += 8) {
-      const batch = await Promise.all(
-        Array.from({ length: 8 }, (_, k) => tryLoad(`${DIR}page${i + k}.${EXT}`)));
-      for (const im of batch) {
-        if (!im) return found;
-        found.push(im);
-      }
-    }
-    return found;
+  function closeSheet(fromPop) {
+    if ($("sheet").hidden) return;
+    $("sheet").hidden = true;
+    document.body.style.overflow = "";
+    if (!fromPop && history.state && history.state.sheet) history.back();
   }
 
-  discover().then(imgs => {
-    if (!imgs.length) { $("msg").hidden = false; return; }
-    window._pageCache = imgs;                      
-    PAGES = imgs.map((_, k) => `${DIR}page${k + 1}.${EXT}`);
-    N = PAGES.length;
-    ratio = imgs[0].naturalHeight / imgs[0].naturalWidth;
-    $("pageTotal").textContent = N;
-    $("pageNo").max = N;
-    book.style.display = "block";
-    ready = true;
-    buildThumbs();
-    fit();
-    updateUI(0);
-  });
+  window.addEventListener("popstate", () => closeSheet(true));
+  $("sheetClose").onclick = () => closeSheet(false);
+  $("sheet").addEventListener("click", e => { if (e.target === $("sheet")) closeSheet(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(false); });
+
+  fetch("library.json", { cache: "no-cache" })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(d => {
+      LIB = d;
+      if (d.title) { $("siteTitle").textContent = d.title; document.title = d.title; }
+      if (!d.series || !d.series.length) { $("msg").hidden = false; return; }
+      renderShelf();
+    })
+    .catch(() => { $("msg").hidden = false; });
 </script>
 </body>
 </html>
